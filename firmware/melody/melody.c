@@ -120,7 +120,7 @@ void mel_wake(void *buffer_a, void *buffer_b)
 }
 
 /**************************************************************************************************
-** Shut down melody generator harware
+** Shut down melody generator hardware
 */
 void mel_sleep(void)
 {
