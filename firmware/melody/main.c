@@ -3,6 +3,7 @@
  */
 
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include "melody.h"
 #include "test.h"
 
@@ -18,6 +19,9 @@ int main(void)
 	while (!(OSC.STATUS & OSC_RC32MRDY_bm));
 	CLK.PSCTRL = CLK_PSADIV_2_gc | CLK_PSBCDIV_1_1_gc;
 	CLK.CTRL = CLK_SCLKSEL_RC32M_gc;
+
+	PMIC.CTRL = PMIC_HILVLEN_bm | PMIC_MEDLVLEN_bm | PMIC_LOLVLEN_bm;
+	sei();
 
 	MEL_play(test);
 	for(;;);
