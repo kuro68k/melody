@@ -12,6 +12,8 @@
 #include "wave1.h"
 
 
+#define _countof(array)		(sizeof(array) / sizeof(array[0]))
+
 #define SAMPLE_TC			TCC4
 #define SAMPLE_EVENT_MUX	EVSYS_CHMUX_TCC4_OVF_gc
 
@@ -79,7 +81,7 @@ ISR(EDMA_CH2_vect)
 /**************************************************************************************************
 ** Configure melody generator hardware
 */
-void mel_wake(void *buffer_a, void *buffer_b)
+void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 {
 	// DAC for audio output
 	DACA.CTRLA = DAC_CH0EN_bm | DAC_ENABLE_bm;
@@ -100,8 +102,8 @@ void mel_wake(void *buffer_a, void *buffer_b)
 	SAMPLE_TC.CTRLA = TC_TC4_CLKSEL_DIV1_gc;
 
 	// event channel to drive DMA
-	//EVSYS.CH0CTRL = 0;
-	//EVSYS.CH0MUX = SAMPLE_EVENT_MUX;
+	EVSYS.CH0CTRL = 0;
+	EVSYS.CH0MUX = SAMPLE_EVENT_MUX;
 
 	// DMA to copy samples to DAC
 	EDMA.CTRL = 0;
@@ -112,11 +114,12 @@ void mel_wake(void *buffer_a, void *buffer_b)
 	for (uint8_t i = 0; i < 2; i++)
 	{
 		ch->CTRLA = EDMA_CH_SINGLE_bm | EDMA_CH_BURSTLEN_bm;
-		ch->CTRLB = EDMA_CH_TRNINTLVL_HI_gc;
+		//ch->CTRLB = EDMA_CH_TRNINTLVL_HI_gc;
 		ch->ADDRCTRL = EDMA_CH_RELOAD_BLOCK_gc | EDMA_CH_DIR_INC_gc;
 		ch->DESTADDRCTRL = EDMA_CH_RELOAD_BURST_gc | EDMA_CH_DIR_INC_gc;
-		ch->TRIGSRC = EDMA_CH_TRIGSRC_TCC4_OVF_gc;
-		ch->TRFCNT = 32 * 2;	// 32 words
+		//ch->TRIGSRC = EDMA_CH_TRIGSRC_TCC4_OVF_gc;
+		ch->TRIGSRC = EDMA_CH_TRIGSRC_EVSYS_CH0_gc;
+		ch->TRFCNT = buffer_length_bytes;
 		ch->DESTADDR = (uint16_t)&DACA.CH0DATA;
 		ch = &EDMA.CH2;
 	}
@@ -140,13 +143,13 @@ void mel_sleep(void)
 */
 void MEL_play(const __flash NOTE_t *melody)
 {
-	int16_t	buffer_a[32];
-	int16_t	buffer_b[32];
+	volatile int16_t	buffer_a[32];
+	volatile int16_t	buffer_b[32];
 
 	for (uint8_t i = 0; i < 32; i++)
 		buffer_a[i] = buffer_b[i] = 2048;
 
-	mel_wake(buffer_a, buffer_b);
+	mel_wake((void *)buffer_a, (void *)buffer_b, sizeof(buffer_a));
 
 	VOICE_t voices[NUM_VOICES];
 	memset(voices, 0, sizeof(voices));
@@ -154,51 +157,45 @@ void MEL_play(const __flash NOTE_t *melody)
 	uint16_t ms_counter = 0;
 	bool exit_flag = false;
 	bool all_silent = false;
-	//EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;	// start first
 
-	
-	//uint8_t buffer[sizeof(wave1.wave)];
-	//for (uint16_t i = 0; i < sizeof(buffer); i++)
-	//	buffer[i] = wave1.wave[i];
-	uint16_t buffer[256] = { 1024,1049,1074,1099,1124,1149,1174,1198,
-							1223,1248,1272,1296,1321,1345,1368,1392,
-							1415,1438,1461,1484,1506,1528,1550,1571,
-							1592,1613,1633,1653,1673,1692,1711,1729,
-							1747,1765,1782,1799,1815,1830,1846,1860,
-							1875,1888,1901,1914,1926,1938,1949,1959,
-							1969,1978,1987,1995,2003,2010,2016,2022,
-							2027,2032,2036,2039,2042,2044,2046,2047,
-							2047,2047,2046,2044,2042,2039,2036,2032,
-							2027,2022,2016,2010,2003,1995,1987,1978,
-							1969,1959,1949,1938,1926,1914,1901,1888,
-							1875,1860,1846,1830,1815,1799,1782,1765,
-							1747,1729,1711,1692,1673,1653,1633,1613,
-							1592,1571,1550,1528,1506,1484,1461,1438,
-							1415,1392,1368,1345,1321,1296,1272,1248,
-							1223,1198,1174,1149,1124,1099,1074,1049,
-							1024,998,973,948,923,898,873,849,
-							824,799,775,751,726,702,679,655,
-							632,609,586,563,541,519,497,476,
-							455,434,414,394,374,355,336,318,
-							300,282,265,248,232,217,201,187,
-							172,159,146,133,121,109,98,88,
-							78,69,60,52,44,37,31,25,
-							20,15,11,8,5,3,1,0,
-							0,0,1,3,5,8,11,15,
-							20,25,31,37,44,52,60,69,
-							78,88,98,109,121,133,146,159,
-							172,187,201,217,232,248,265,282,
-							300,318,336,355,374,394,414,434,
-							455,476,497,519,541,563,586,609,
-							632,655,679,702,726,751,775,799,
-							824,849,873,898,923,948,973,998 };
-	
-	//EDMA.CTRL = EDMA_ENABLE_bm | EDMA_CHMODE_STD02_gc | EDMA_DBUFMODE_DISABLE_gc | EDMA_PRIMODE_RR0123_gc;
+
+	uint16_t buffer[256] = { 2048,2098,2148,2198,2248,2298,2348,2398,
+							2447,2496,2545,2594,2642,2690,2737,2784,
+							2831,2877,2923,2968,3013,3057,3100,3143,
+							3185,3226,3267,3307,3346,3385,3423,3459,
+							3495,3530,3565,3598,3630,3662,3692,3722,
+							3750,3777,3804,3829,3853,3876,3898,3919,
+							3939,3958,3975,3992,4007,4021,4034,4045,
+							4056,4065,4073,4080,4085,4089,4093,4094,
+							4095,4094,4093,4089,4085,4080,4073,4065,
+							4056,4045,4034,4021,4007,3992,3975,3958,
+							3939,3919,3898,3876,3853,3829,3804,3777,
+							3750,3722,3692,3662,3630,3598,3565,3530,
+							3495,3459,3423,3385,3346,3307,3267,3226,
+							3185,3143,3100,3057,3013,2968,2923,2877,
+							2831,2784,2737,2690,2642,2594,2545,2496,
+							2447,2398,2348,2298,2248,2198,2148,2098,
+							2048,1997,1947,1897,1847,1797,1747,1697,
+							1648,1599,1550,1501,1453,1405,1358,1311,
+							1264,1218,1172,1127,1082,1038,995,952,
+							910,869,828,788,749,710,672,636,
+							600,565,530,497,465,433,403,373,
+							345,318,291,266,242,219,197,176,
+							156,137,120,103,88,74,61,50,
+							39,30,22,15,10,6,2,1,
+							0,1,2,6,10,15,22,30,
+							39,50,61,74,88,103,120,137,
+							156,176,197,219,242,266,291,318,
+							345,373,403,433,465,497,530,565,
+							600,636,672,710,749,788,828,869,
+							910,952,995,1038,1082,1127,1172,1218,
+							1264,1311,1358,1405,1453,1501,1550,1599,
+							1648,1697,1747,1797,1847,1897,1947,1997 };
+/*
 	EDMA.CH0.ADDR = (uint16_t)buffer;
 	EDMA.CH2.ADDR = (uint16_t)buffer;
 	EDMA.CH0.TRFCNT = 512;
 	EDMA.CH2.TRFCNT = 512;
-	//EDMA.CH0.CTRLA = EDMA_CH_SINGLE_bm | EDMA_CH_BURSTLEN_bm;
 
 	EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
 	for(uint8_t j = 0; j < 50; j++)
@@ -210,21 +207,63 @@ void MEL_play(const __flash NOTE_t *melody)
 		while (!dma_ch2_complete_SIG);
 		dma_ch2_complete_SIG = 0;
 	}
-
-/*
-	for(uint8_t j = 0; j < 10; j++)
-	{
-		for (uint16_t i = 0; i < 256; i++)
-		{
-			DACA.CH0DATA = buffer[i];
-			_delay_us(50);
-		}
-	}
 */
 
+	uint16_t idx = 0;
+	uint8_t sub = 0;
+	//uint16_t limit = wave1.attack_len + wave1.sustain_len;
+	
+	EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
+	EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
+	for(uint8_t j = 0; j < 50; j++)
+	{
+		EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
+		//while (!dma_ch0_complete_SIG);
+		//dma_ch0_complete_SIG = 0;
+		while(!(EDMA.INTFLAGS & EDMA_CH0TRNFIF_bm));
+		EDMA.INTFLAGS = EDMA_CH0TRNFIF_bm;
+		//for (uint8_t i = 0; i < _countof(buffer_a); i++)
+		for (uint8_t i = 0; i < 32; i++)
+		{
+			buffer_a[i] = buffer[idx];
+			sub++;
+			if (sub > 2)
+			{
+				sub = 0;
+				idx++;
+			}
+			if (idx >= _countof(buffer))
+				idx = 0;
+			//buffer_a[i] = (wave1.wave[idx++] + 2047) * 8;
+			//if (idx > limit)
+				//idx = wave1.attack_len;
+		}
+		
+		EDMA.CH0.CTRLA |= EDMA_CH_REPEAT_bm;
+		//while (!dma_ch2_complete_SIG);
+		//dma_ch2_complete_SIG = 0;
+		while(!(EDMA.INTFLAGS & EDMA_CH2TRNFIF_bm));
+		EDMA.INTFLAGS = EDMA_CH2TRNFIF_bm;
+		//for (uint8_t i = 0; i < _countof(buffer_b); i++)
+		for (uint8_t i = 0; i < 32; i++)
+		{
+			buffer_b[i] = buffer[idx];
+			sub++;
+			if (sub > 2)
+			{
+				sub = 0;
+				idx++;
+			}
+			if (idx >= _countof(buffer))
+				idx = 0;
+			//buffer_b[i] = (wave1.wave[idx++] + 2047) * 8;
+			//if (idx > limit)
+				//idx = wave1.attack_len;
+		}
+
+	}
 	for(;;);
 	
-
 	do
 	{
 		// wait for a buffer to complete
@@ -236,14 +275,14 @@ void MEL_play(const __flash NOTE_t *melody)
 		if (dma_ch0_complete_SIG)
 		{
 			dma_ch0_complete_SIG = 0;
-			ptr = buffer_a;
+			ptr = (int16_t *)buffer_a;
 			EDMA.CH0.CTRLA |= EDMA_CH_REPEAT_bm;
 		}
 		else
 		{
 			dma_ch2_complete_SIG = 0;
-			ptr = buffer_b;
-			EDMA.CH1.CTRLA |= EDMA_CH_REPEAT_bm;
+			ptr = (int16_t *)buffer_b;
+			EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 		}
 
 
