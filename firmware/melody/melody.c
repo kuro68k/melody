@@ -149,6 +149,8 @@ void MEL_play(const __flash NOTE_t *melody)
 	for (uint8_t i = 0; i < 32; i++)
 		buffer_a[i] = buffer_b[i] = 2048;
 
+	PORTC.OUT = 0x00;
+	PORTC.DIR = 0xFF;
 	mel_wake((void *)buffer_a, (void *)buffer_b, sizeof(buffer_a));
 
 	VOICE_t voices[NUM_VOICES];
@@ -164,12 +166,12 @@ void MEL_play(const __flash NOTE_t *melody)
 
 	uint16_t idx = 0;
 	uint8_t sub = 0;
-	uint16_t limit = wave1.attack_len + wave1.sustain_len;
-	//uint16_t limit = sinewave.attack_len + sinewave.sustain_len;
+	//uint16_t limit = wave1.attack_len + wave1.sustain_len;
+	uint16_t limit = sinewave.attack_len + sinewave.sustain_len;
 	
 	EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 	EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
-	for(uint8_t j = 0; j < 50; j++)
+	for(uint8_t j = 0; j < 254; j++)
 	{
 		EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 		//while (!dma_ch0_complete_SIG);
@@ -179,14 +181,16 @@ void MEL_play(const __flash NOTE_t *melody)
 		//for (uint8_t i = 0; i < _countof(buffer_a); i++)
 		for (uint8_t i = 0; i < 32; i++)
 		{
-			buffer_a[i] = ((int16_t)wave1.wave[idx] * 8) + 2048;
+			//buffer_a[i] = ((int16_t)wave1.wave[idx] * 1) + 2048;
+			buffer_a[i] = ((int16_t)sinewave.wave[idx] * 1) + 2048;
 			sub++;
-			if (sub > 3)
+			if (sub > 0)
 			{
 				sub = 0;
 				idx++;
 				if (idx >= limit)
-					idx = wave1.attack_len;
+					//idx = wave1.attack_len;
+					idx = 0;
 			}
 		}
 		
@@ -198,14 +202,16 @@ void MEL_play(const __flash NOTE_t *melody)
 		//for (uint8_t i = 0; i < _countof(buffer_b); i++)
 		for (uint8_t i = 0; i < 32; i++)
 		{
-			buffer_b[i] = ((int16_t)wave1.wave[idx] * 8) + 2048;
+			//buffer_b[i] = ((int16_t)wave1.wave[idx] * 1) + 2048;
+			buffer_b[i] = ((int16_t)sinewave.wave[idx] * 1) + 2048;
 			sub++;
-			if (sub > 3)
+			if (sub > 0)
 			{
 				sub = 0;
 				idx++;
 				if (idx >= limit)
-					idx = wave1.attack_len;
+					//idx = wave1.attack_len;
+					idx = 0;
 			}
 		}
 
