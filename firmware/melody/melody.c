@@ -14,8 +14,9 @@
 
 #define _countof(array)		(sizeof(array) / sizeof(array[0]))
 
-#define SAMPLE_TC			TCC4
-#define SAMPLE_EVENT_MUX	EVSYS_CHMUX_TCC4_OVF_gc
+#define SAMPLE_TC			TCC5
+#define SAMPLE_EVENT_MUX	EVSYS_CHMUX_TCC5_OVF_gc
+#define	PWM_TC				TCC4
 
 #define NUM_VOICES			8
 
@@ -87,7 +88,23 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 	DACA.CTRLA = DAC_CH0EN_bm | DAC_ENABLE_bm;
 	DACA.CTRLB = DAC_CHSEL_SINGLE_gc;
 	DACA.CTRLC = DAC_REFSEL_AVCC_gc;
-	//DACA.EVCTRL = DAC_EVSEL_0_gc;
+
+	// PWM timer
+	PORTC.DIRSET = PIN2_bm | PIN3_bm;
+	PWM_TC.CTRLA = 0;	// stop if running
+	PWM_TC.CTRLB = TC_TC4_WGMODE_NORMAL_gc;
+	PWM_TC.CTRLC = 0;
+	PWM_TC.CTRLD = 0;
+	PWM_TC.CTRLE = TC_TC4_CCCMODE_COMP_gc | TC_TC4_CCDMODE_COMP_gc;
+	PWM_TC.INTCTRLA = 0;
+	PWM_TC.INTCTRLB = 0;
+	PWM_TC.CNT = 0;
+	PWM_TC.PER = 0x00FF;
+	PWM_TC.CCC = 0x7F;
+	PWM_TC.CCD = 0x7F;
+	PWM_TC.CTRLA = TC_TC4_CLKSEL_DIV1_gc;
+
+	for(;;);
 
 	// 32kHz sample timer
 	SAMPLE_TC.CTRLA = 0;	// stop if running
