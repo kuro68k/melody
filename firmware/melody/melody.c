@@ -91,7 +91,7 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 
 	// PWM timer
 	PORTC.DIRSET = PIN2_bm | PIN3_bm;
-	//PORTCFG.SRLCTRL |= PORTCFG_SRLENRC_bm;
+	PORTCFG.SRLCTRL |= PORTCFG_SRLENRC_bm;	// slew rate limiting
 	HIRESC.CTRLA = HIRES_HRPLUS_HRP4_gc | HIRES_HREN_HRP4_gc;
 	PWM_TC.CTRLA = 0;	// stop if running
 	PWM_TC.CTRLB = TC_TC4_WGMODE_NORMAL_gc;
@@ -105,8 +105,6 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 	PWM_TC.CCC = 0x7F;
 	PWM_TC.CCD = 0x7F;
 	PWM_TC.CTRLA = TC_TC4_CLKSEL_DIV1_gc;
-
-	for(;;);
 
 	// 32kHz sample timer
 	SAMPLE_TC.CTRLA = 0;	// stop if running
@@ -179,6 +177,20 @@ void MEL_play(const __flash NOTE_t *melody)
 	bool exit_flag = false;
 	bool all_silent = false;
 
+
+	for(uint16_t i = 0; i < 500; i++)
+	{
+		for (uint16_t s = 0; s < 256; s++)
+		{
+			uint8_t s1 = sinewave.wave[s] - 0x80;
+			uint8_t s2 = ~s1;
+			
+			PWM_TC.CCCBUF = s1;
+			PWM_TC.CCCBUF = s2;
+			_delay_us(4);
+		}
+	}
+	for(;;);
 
 	DACA.CH0DATA = 2048;
 	_delay_ms(50);
