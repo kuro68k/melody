@@ -101,9 +101,9 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 	PWM_TC.INTCTRLA = 0;
 	PWM_TC.INTCTRLB = 0;
 	PWM_TC.CNT = 0;
-	PWM_TC.PER = 0x00FF;
-	PWM_TC.CCC = 0x7F;
-	PWM_TC.CCD = 0x7F;
+	PWM_TC.PER = 0x01FF;
+	PWM_TC.CCC = 0xFF;
+	PWM_TC.CCD = 0xFF;
 	PWM_TC.CTRLA = TC_TC4_CLKSEL_DIV1_gc;
 
 	// 32kHz sample timer
@@ -131,10 +131,8 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 	for (uint8_t i = 0; i < 2; i++)
 	{
 		ch->CTRLA = EDMA_CH_SINGLE_bm | EDMA_CH_BURSTLEN_bm;
-		//ch->CTRLB = EDMA_CH_TRNINTLVL_HI_gc;
 		ch->ADDRCTRL = EDMA_CH_RELOAD_BLOCK_gc | EDMA_CH_DIR_INC_gc;
 		ch->DESTADDRCTRL = EDMA_CH_RELOAD_BURST_gc | EDMA_CH_DIR_INC_gc;
-		//ch->TRIGSRC = EDMA_CH_TRIGSRC_TCC4_OVF_gc;
 		ch->TRIGSRC = EDMA_CH_TRIGSRC_EVSYS_CH0_gc;
 		ch->TRFCNT = buffer_length_bytes;
 		ch->DESTADDR = (uint16_t)&DACA.CH0DATA;
@@ -185,8 +183,8 @@ void MEL_play(const __flash NOTE_t *melody)
 			uint8_t s1 = sinewave.wave[s] - 0x80;
 			uint8_t s2 = ~s1;
 			
-			PWM_TC.CCCBUF = s1;
-			PWM_TC.CCCBUF = s2;
+			PWM_TC.CCCBUF = (uint16_t)s1 * 2;
+			PWM_TC.CCDBUF = (uint16_t)s2 * 2;
 			_delay_us(4);
 		}
 	}
