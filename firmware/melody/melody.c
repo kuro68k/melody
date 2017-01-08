@@ -91,6 +91,8 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 
 	// PWM timer
 	PORTC.DIRSET = PIN2_bm | PIN3_bm;
+	//PORTCFG.SRLCTRL |= PORTCFG_SRLENRC_bm;
+	HIRESC.CTRLA = HIRES_HRPLUS_HRP4_gc | HIRES_HREN_HRP4_gc;
 	PWM_TC.CTRLA = 0;	// stop if running
 	PWM_TC.CTRLB = TC_TC4_WGMODE_NORMAL_gc;
 	PWM_TC.CTRLC = 0;
