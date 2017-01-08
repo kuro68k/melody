@@ -19,6 +19,7 @@
 #define	PWM_TC				TCC4
 
 #define NUM_VOICES			8
+#define BUFFER_SAMPLES		32
 
 // sample step size * 65536
 const __flash uint32_t key_lut[] = {	4286,4540,4810,5099,5400,5723,6061,6423,6805,7209,7639,8092,8572,
@@ -63,20 +64,40 @@ typedef struct
 
 volatile uint8_t	dma_ch0_complete_SIG = 0;
 volatile uint8_t	dma_ch2_complete_SIG = 0;
+volatile uint16_t	buffer_a[32];
+volatile uint16_t	buffer_b[32];
+
 
 /**************************************************************************************************
-** DMA transaction complete interrupt handers
+** Sample timer overflow interrupt
 */
-ISR(EDMA_CH0_vect)
+ISR(TCC5_OVF_vect)
 {
-	dma_ch0_complete_SIG = 0xFF;
-	EDMA.INTFLAGS = EDMA_CH0TRNFIF_bm;	// clear interrupt flag
-}
+	static uint8_t sample = 0;
+	static bool db = 0;
+	static volatile uint16_t *buffer = buffer_a;
 
-ISR(EDMA_CH2_vect)
-{
-	dma_ch2_complete_SIG = 0xFF;
-	EDMA.INTFLAGS = EDMA_CH2TRNFIF_bm;	// clear interrupt flag
+	SAMPLE_TC.INTFLAGS = TC5_OVFIF_bm;		// clear interrupt flag
+
+	uint16_t s = buffer[sample++];
+	PWM_TC.CCCBUF = s;
+	PWM_TC.CCDBUF = (~s) & 0x1FF;
+
+	if (sample >= BUFFER_SAMPLES)
+	{
+		if (!db)
+		{
+			dma_ch0_complete_SIG = 0xFF;
+			buffer = buffer_b;
+		}
+		else
+		{
+			dma_ch2_complete_SIG = 0xFF;
+			buffer = buffer_a;
+		}
+		db = !db;
+		sample = 0;
+	}
 }
 
 /**************************************************************************************************
@@ -91,7 +112,7 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 
 	// PWM timer
 	PORTC.DIRSET = PIN2_bm | PIN3_bm;
-	PORTCFG.SRLCTRL |= PORTCFG_SRLENRC_bm;	// slew rate limiting
+	//PORTCFG.SRLCTRL |= PORTCFG_SRLENRC_bm;	// slew rate limiting
 	HIRESC.CTRLA = HIRES_HRPLUS_HRP4_gc | HIRES_HREN_HRP4_gc;
 	PWM_TC.CTRLA = 0;	// stop if running
 	PWM_TC.CTRLB = TC_TC4_WGMODE_NORMAL_gc;
@@ -115,7 +136,7 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 	SAMPLE_TC.INTCTRLA = 0;
 	SAMPLE_TC.INTCTRLB = 0;
 	SAMPLE_TC.CNT = 0;
-	SAMPLE_TC.PER = 0x01F3;	// 32kHz @ 16MHz
+	SAMPLE_TC.PER = 0x03E7;	// 32kHz @ 32MHz
 	SAMPLE_TC.CTRLA = TC_TC4_CLKSEL_DIV1_gc;
 
 	// event channel to drive DMA
@@ -158,13 +179,10 @@ void mel_sleep(void)
 */
 void MEL_play(const __flash NOTE_t *melody)
 {
-	volatile int16_t	buffer_a[32];
-	volatile int16_t	buffer_b[32];
-
 	for (uint8_t i = 0; i < 32; i++)
 		buffer_a[i] = buffer_b[i] = 2048;
 
-	PORTC.OUT = 0x00;
+	PORTC.OUT = 0x01;
 	PORTC.DIR = 0xFF;
 	mel_wake((void *)buffer_a, (void *)buffer_b, sizeof(buffer_a));
 
@@ -175,7 +193,7 @@ void MEL_play(const __flash NOTE_t *melody)
 	bool exit_flag = false;
 	bool all_silent = false;
 
-
+/*
 	for(uint16_t i = 0; i < 500; i++)
 	{
 		for (uint16_t s = 0; s < 256; s++)
@@ -189,7 +207,7 @@ void MEL_play(const __flash NOTE_t *melody)
 		}
 	}
 	for(;;);
-
+*/
 	DACA.CH0DATA = 2048;
 	_delay_ms(50);
 
@@ -198,53 +216,60 @@ void MEL_play(const __flash NOTE_t *melody)
 	//uint16_t limit = wave1.attack_len + wave1.sustain_len;
 	uint16_t limit = sinewave.attack_len + sinewave.sustain_len;
 	
-	EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
-	EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
+	//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
+	//EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
+	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_HI_gc;
 	for(uint8_t j = 0; j < 254; j++)
 	{
-		EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
-		//while (!dma_ch0_complete_SIG);
-		//dma_ch0_complete_SIG = 0;
-		while(!(EDMA.INTFLAGS & EDMA_CH0TRNFIF_bm));
-		EDMA.INTFLAGS = EDMA_CH0TRNFIF_bm;
+		// buffer A
+		//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
+		//while(!(EDMA.INTFLAGS & EDMA_CH0TRNFIF_bm));
+		//EDMA.INTFLAGS = EDMA_CH0TRNFIF_bm;
+		while (dma_ch0_complete_SIG == 0);
+		dma_ch0_complete_SIG = 0;
+		
 		//for (uint8_t i = 0; i < _countof(buffer_a); i++)
 		for (uint8_t i = 0; i < 32; i++)
 		{
 			//buffer_a[i] = ((int16_t)wave1.wave[idx] * 1) + 2048;
-			buffer_a[i] = ((int16_t)sinewave.wave[idx] * 1) + 2048;
+			uint8_t s = sinewave.wave[idx] - 0x80;
+			buffer_a[i] = (uint16_t)s * 1;
 			sub++;
 			if (sub > 0)
 			{
 				sub = 0;
-				idx++;
+				idx += 7;
 				if (idx >= limit)
 					//idx = wave1.attack_len;
-					idx = 0;
+					idx -= limit;
 			}
 		}
 		
-		EDMA.CH0.CTRLA |= EDMA_CH_REPEAT_bm;
-		//while (!dma_ch2_complete_SIG);
-		//dma_ch2_complete_SIG = 0;
-		while(!(EDMA.INTFLAGS & EDMA_CH2TRNFIF_bm));
-		EDMA.INTFLAGS = EDMA_CH2TRNFIF_bm;
-		//for (uint8_t i = 0; i < _countof(buffer_b); i++)
+		// buffer B
+		//EDMA.CH0.CTRLA |= EDMA_CH_REPEAT_bm;
+		//while(!(EDMA.INTFLAGS & EDMA_CH2TRNFIF_bm));
+		//EDMA.INTFLAGS = EDMA_CH2TRNFIF_bm;
+		while (dma_ch2_complete_SIG == 0);
+		dma_ch2_complete_SIG = 0;
+
 		for (uint8_t i = 0; i < 32; i++)
 		{
 			//buffer_b[i] = ((int16_t)wave1.wave[idx] * 1) + 2048;
-			buffer_b[i] = ((int16_t)sinewave.wave[idx] * 1) + 2048;
+			uint8_t s = sinewave.wave[idx] - 0x80;
+			buffer_b[i] = (uint16_t)s * 1;
 			sub++;
 			if (sub > 0)
 			{
 				sub = 0;
-				idx++;
+				idx += 7;
 				if (idx >= limit)
 					//idx = wave1.attack_len;
-					idx = 0;
+					idx -= limit;
 			}
 		}
 
 	}
+	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_OFF_gc;
 	for(;;);
 	
 	do
