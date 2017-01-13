@@ -170,6 +170,30 @@ int decode_meta(FILE *fin)
 	return 0;
 }
 
+// decode a control event
+int decode_control(uint8_t type_chan, FILE *fin)
+{
+	uint8_t control_type = fgetc(fin);
+	uint8_t parameter = fgetc(fin);
+
+	switch (control_type)
+	{
+		case 0x00:	// bank select MSB
+			printf("Bank select MSB (ch %u 0x%02X)\n", type_chan & 0xF, parameter);
+			break;
+
+		case 0x20:	// bank select LSB
+			printf("Bank select LSB (ch %u 0x%02X)\n", type_chan & 0xF, parameter);
+			break;
+
+		default:
+			printf("Unknown control event (ch %u, 0x%02X %02X)\n", type_chan & 0xF, parameter);
+			break;
+	}
+
+	return 0;
+}
+
 // decode a track
 int decode_track(FILE *fin)
 {
@@ -179,6 +203,8 @@ int decode_track(FILE *fin)
 
 	for(;;)
 	{
+		long pos = ftell(fin);
+
 		uint32_t time = read_var_len(fin);
 		int temp = fgetc(fin);
 		if (temp == -1)
@@ -193,7 +219,7 @@ int decode_track(FILE *fin)
 
 		abs_time_ticks += time;
 		abs_time_ms += time * ms_per_midi_tick;
-		printf("%u\t+%u\t%f\t%02X\t", abs_time_ticks, time, abs_time_ms, type_chan);
+		printf("%lu\t%u\t+%u\t%.0f\t%02X\t", pos, abs_time_ticks, time, abs_time_ms, type_chan);
 
 		switch (type_chan & 0xF0)
 		{
@@ -227,10 +253,16 @@ int decode_track(FILE *fin)
 				break;
 			}
 
-			case 0xC0:	// program change
-				printf("Program change (ignored)\n", type_chan & 0x0F);
-				fgetc(fin);	// discard parameter
+			case 0xB0:	// control change
+				decode_control(type_chan, fin);
 				break;
+
+			case 0xC0:	// program change
+			{
+				uint8_t parameter = fgetc(fin);
+				printf("Program change (ch %u, 0x%02X)\n", type_chan & 0x0F, parameter);
+				break;
+			}
 
 			case 0xF0:	// meta or system event
 			{
