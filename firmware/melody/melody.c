@@ -180,7 +180,7 @@ void mel_sleep(void)
 void MEL_play(const __flash NOTE_t *melody)
 {
 	for (uint8_t i = 0; i < 32; i++)
-		buffer_a[i] = buffer_b[i] = 2048;
+		buffer_a[i] = buffer_b[i] = 256;
 
 	PORTC.OUT = 0x01;
 	PORTC.DIR = 0xFF;
@@ -298,6 +298,8 @@ void MEL_play(const __flash NOTE_t *melody)
 		// process any note start/stop events
 		while (melody->time == ms_counter)
 		{
+			//if (melody->channel != 0)
+			//	goto hack1;
 			if (melody->velocity != 0)	// start a voice
 			{
 				for (uint8_t i = 0; i < NUM_VOICES; i++)
@@ -309,7 +311,8 @@ void MEL_play(const __flash NOTE_t *melody)
 						voices[i].velocity = melody->velocity;
 						voices[i].decay = 0;
 						voices[i].sample_ptr = 0;
-						break;
+						//break;
+						i = 0xFE;
 					}
 				}
 			}
@@ -324,7 +327,7 @@ void MEL_play(const __flash NOTE_t *melody)
 					}
 				}
 			}
-
+hack1:
 			melody++;	// next note
 			if (melody->time == -1)
 				exit_flag = true;
@@ -343,9 +346,10 @@ void MEL_play(const __flash NOTE_t *melody)
 				if (voices[i].velocity != 0)
 				{
 					uint16_t idx = voices[i].sample_ptr >> 16;
-					__int24 s = wave1.wave[idx];
+					//__int24 s = wave1.wave[idx];
+					int32_t s = wave1.wave[idx];
 					s *= voices[i].velocity;
-					s *= decay_lut[voices[i].decay];
+					s *= decay_lut[voices[i].decay >> 1];
 					a += s;
 
 					voices[i].sample_ptr += key_lut[voices[i].key];
@@ -360,12 +364,12 @@ void MEL_play(const __flash NOTE_t *melody)
 					all_silent = false;
 				}
 			}
-			a >>= 13;
+			a >>= 16;
 			if (a > 253) a = 253;
 			if (a < -255) a = -255;
 			*ptr++ = a + 0xFF;
 		}
-	} while(!exit_flag && !all_silent);
+	} while(!exit_flag || !all_silent);
 
 	mel_sleep();
 }

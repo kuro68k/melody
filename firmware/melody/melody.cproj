@@ -101,6 +101,9 @@
     <Compile Include="hw_misc.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="kamata4.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="main.c">
       <SubType>compile</SubType>
     </Compile>

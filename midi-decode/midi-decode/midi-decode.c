@@ -354,15 +354,17 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	int res;
+	int res = 0;
 	if ((res = read_file_header(fin)) != 0)
-		return res;
+		goto exit;
 	if ((res = read_track_header(fin)) != 0)
-		return res;
+		goto exit;
 	if ((res = decode_track(fin)) != 0)
-		return res;
+		goto exit;
 	if ((res = generate_output(argv[2])) != 0)
-		return res;
+		goto exit;
 
-	return 0;
+exit:
+	fclose(fin);
+	return res;
 }

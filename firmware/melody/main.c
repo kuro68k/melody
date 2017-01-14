@@ -6,6 +6,7 @@
 #include <avr/interrupt.h>
 #include "melody.h"
 #include "test.h"
+#include "kamata4.h"
 #include "hw_misc.h"
 
 
@@ -29,7 +30,7 @@ int main(void)
 	PMIC.CTRL = PMIC_HILVLEN_bm | PMIC_MEDLVLEN_bm | PMIC_LOLVLEN_bm;
 	sei();
 
-	MEL_play(test);
+	MEL_play(kamata4);
 	for(;;);
 }
 
