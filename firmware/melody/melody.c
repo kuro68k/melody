@@ -18,7 +18,7 @@
 #define SAMPLE_EVENT_MUX	EVSYS_CHMUX_TCC5_OVF_gc
 #define	PWM_TC				TCC4
 
-#define NUM_VOICES			8
+#define NUM_VOICES			6
 #define BUFFER_SAMPLES		32
 
 // sample step size * 65536
@@ -274,6 +274,9 @@ void MEL_play(const __flash NOTE_t *melody)
 
 	//for(;;);
 
+	uint32_t limit_scaled = (uint32_t)(wave1.attack_len + wave1.sustain_len) << 16;
+	uint32_t sustain_length_scaled = (uint32_t)wave1.sustain_len << 16;
+
 	do
 	{
 		// wait for a buffer to complete
@@ -311,8 +314,8 @@ void MEL_play(const __flash NOTE_t *melody)
 						voices[i].velocity = melody->velocity;
 						voices[i].decay = 0;
 						voices[i].sample_ptr = 0;
-						//break;
-						i = 0xFE;
+						break;
+						//i = 0xFE;
 					}
 				}
 			}
@@ -353,9 +356,9 @@ hack1:
 					a += s;
 
 					voices[i].sample_ptr += key_lut[voices[i].key];
-					if (voices[i].sample_ptr > ((uint32_t)(wave1.attack_len + wave1.sustain_len) << 16))
+					if (voices[i].sample_ptr > limit_scaled)
 					{
-						voices[i].sample_ptr -= (uint32_t)wave1.sustain_len << 16;
+						voices[i].sample_ptr -= sustain_length_scaled;
 						voices[i].decay++;
 						if (voices[i].decay > sizeof(decay_lut))	// note faded out
 							voices[i].velocity = 0;
