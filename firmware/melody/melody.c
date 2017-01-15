@@ -305,19 +305,19 @@ void MEL_play(const __flash NOTE_t *melody)
 			//	goto hack1;
 			if (melody->velocity != 0)	// start a voice
 			{
-				for (uint8_t i = 0; i < NUM_VOICES; i++)
-				{
-					if (voices[i].velocity == 0)	// free voice
-					{
+				uint8_t i = melody->channel % NUM_VOICES;
+				//for (uint8_t i = 0; i < NUM_VOICES; i++)
+				//{
+					//if (voices[i].velocity == 0)	// free voice
+					//{
 						voices[i].channel = melody->channel;
 						voices[i].key = melody->key;
 						voices[i].velocity = melody->velocity;
 						voices[i].decay = 0;
 						voices[i].sample_ptr = 0;
-						break;
-						//i = 0xFE;
-					}
-				}
+						//break;
+					//}
+				//}
 			}
 			else						// stop a voice
 			{
@@ -330,7 +330,7 @@ void MEL_play(const __flash NOTE_t *melody)
 					}
 				}
 			}
-hack1:
+//hack1:
 			melody++;	// next note
 			if (melody->time == -1)
 				exit_flag = true;
