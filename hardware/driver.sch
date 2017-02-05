@@ -41,7 +41,7 @@ Comp "KEIO"
 Comment1 ""
 Comment2 ""
 Comment3 ""
-Comment4 ""
+Comment4 "CC BY-SA"
 $EndDescr
 $Comp
 L BSS84 Q1
