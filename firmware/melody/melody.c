@@ -77,6 +77,7 @@ ISR(TCC5_OVF_vect)
 	static bool db = 0;
 	static volatile uint16_t *buffer = buffer_a;
 
+PORTA.OUTSET = PIN3_bm;
 	SAMPLE_TC.INTFLAGS = TC5_OVFIF_bm;		// clear interrupt flag
 
 	uint16_t s = buffer[sample++];
@@ -98,6 +99,7 @@ ISR(TCC5_OVF_vect)
 		db = !db;
 		sample = 0;
 	}
+PORTA.OUTCLR = PIN3_bm;
 }
 
 /**************************************************************************************************
@@ -193,6 +195,10 @@ void MEL_play(const __flash NOTE_t *melody)
 	bool exit_flag = false;
 	bool all_silent = false;
 
+// debug
+PORTA.OUT = 0x00;
+PORTA.DIR = 0xFF;
+
 /*
 	for(uint16_t i = 0; i < 500; i++)
 	{
@@ -200,7 +206,7 @@ void MEL_play(const __flash NOTE_t *melody)
 		{
 			uint8_t s1 = sinewave.wave[s] - 0x80;
 			uint8_t s2 = ~s1;
-			
+
 			PWM_TC.CCCBUF = (uint16_t)s1 * 2;
 			PWM_TC.CCDBUF = (uint16_t)s2 * 2;
 			_delay_us(4);
@@ -215,7 +221,7 @@ void MEL_play(const __flash NOTE_t *melody)
 	//uint8_t sub = 0;
 	//uint16_t limit = wave1.attack_len + wave1.sustain_len;
 	//uint16_t limit = sinewave.attack_len + sinewave.sustain_len;
-	
+
 	//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 	//EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
 	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_HI_gc;
@@ -229,7 +235,7 @@ void MEL_play(const __flash NOTE_t *melody)
 		//EDMA.INTFLAGS = EDMA_CH0TRNFIF_bm;
 		while (dma_ch0_complete_SIG == 0);
 		dma_ch0_complete_SIG = 0;
-		
+
 		//for (uint8_t i = 0; i < _countof(buffer_a); i++)
 		for (uint8_t i = 0; i < 32; i++)
 		{
@@ -245,7 +251,7 @@ void MEL_play(const __flash NOTE_t *melody)
 					idx -= wave1.sustain_len;
 			}
 		}
-		
+
 		// buffer B
 		//EDMA.CH0.CTRLA |= EDMA_CH_REPEAT_bm;
 		//while(!(EDMA.INTFLAGS & EDMA_CH2TRNFIF_bm));
@@ -270,17 +276,21 @@ void MEL_play(const __flash NOTE_t *melody)
 
 	}
 	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_OFF_gc;
-*/	
+*/
 
 	//for(;;);
 
-	uint32_t limit_scaled = (uint32_t)(wave1.attack_len + wave1.sustain_len) << 16;
+	//uint32_t limit_scaled = (uint32_t)(wave1.attack_len + wave1.sustain_len) << 16;
+	uint16_t limit = wave1.attack_len + wave1.sustain_len;
 	uint32_t sustain_length_scaled = (uint32_t)wave1.sustain_len << 16;
+
 
 	do
 	{
 		// wait for a buffer to complete
+		PORTA.OUTSET = PIN0_bm;
 		while (!dma_ch0_complete_SIG && !dma_ch2_complete_SIG);
+		PORTA.OUTCLR = PIN0_bm;
 
 		volatile uint16_t *ptr;
 		if (dma_ch0_complete_SIG)
@@ -297,8 +307,8 @@ void MEL_play(const __flash NOTE_t *melody)
 		}
 
 
-
 		// process any note start/stop events
+		PORTA.OUTSET = PIN1_bm;
 		while (melody->time == ms_counter)
 		{
 			//if (melody->channel != 0)
@@ -335,11 +345,13 @@ void MEL_play(const __flash NOTE_t *melody)
 			if (melody->time == -1)
 				exit_flag = true;
 		}
+		PORTA.OUTCLR = PIN1_bm;
 
 		ms_counter++;
 
 
 		// generate buffer
+		PORTA.OUTSET = PIN4_bm;
 		all_silent = true;
 		for (uint8_t sample = 0; sample < 32; sample++)
 		{
@@ -349,14 +361,22 @@ void MEL_play(const __flash NOTE_t *melody)
 				if (voices[i].velocity != 0)
 				{
 					uint16_t idx = voices[i].sample_ptr >> 16;
-					//__int24 s = wave1.wave[idx];
-					int32_t s = wave1.wave[idx];
-					s *= voices[i].velocity;
-					s *= decay_lut[voices[i].decay >> 1];
-					a += s;
+					int16_t s1 = wave1.wave[idx] * voices[i].velocity;
+					__int24 s2 = s1 * decay_lut[voices[i].decay >> 1];
+					a += s2;
 
 					voices[i].sample_ptr += key_lut[voices[i].key];
+					/*
 					if (voices[i].sample_ptr > limit_scaled)
+					{
+						voices[i].sample_ptr -= sustain_length_scaled;
+						voices[i].decay++;
+						if (voices[i].decay > sizeof(decay_lut))	// note faded out
+							voices[i].velocity = 0;
+					}
+					*/
+
+					if ((voices[i].sample_ptr >> 16) > limit)
 					{
 						voices[i].sample_ptr -= sustain_length_scaled;
 						voices[i].decay++;
@@ -367,11 +387,18 @@ void MEL_play(const __flash NOTE_t *melody)
 					all_silent = false;
 				}
 			}
+			/*
 			a >>= 16;
 			if (a > 253) a = 253;
 			if (a < -255) a = -255;
 			*ptr++ = a + 0xFF;
+			*/
+			uint16_t a2 = a >> 16;
+			if (a2 > 253) a2 = 253;
+			if (a2 < -255) a2 = -255;
+			*ptr++ = a2 + 0xFF;
 		}
+		PORTA.OUTCLR = PIN4_bm;
 	} while(!exit_flag || !all_silent);
 
 	mel_sleep();
