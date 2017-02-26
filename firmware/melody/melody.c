@@ -18,7 +18,7 @@
 #define SAMPLE_EVENT_MUX	EVSYS_CHMUX_TCC5_OVF_gc
 #define	PWM_TC				TCC4
 
-#define NUM_VOICES			6
+#define NUM_VOICES			4
 #define BUFFER_SAMPLES		32
 
 // sample step size * 65536
@@ -57,7 +57,7 @@ typedef struct
 	uint8_t		channel;
 	uint8_t		key;
 	uint8_t		velocity;
-	uint8_t		decay;
+	uint16_t	decay;
 	uint32_t	sample_ptr;
 } VOICE_t;
 
@@ -115,14 +115,14 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 	//PORTCFG.SRLCTRL |= PORTCFG_SRLENRC_bm;	// slew rate limiting
 	HIRESC.CTRLA = HIRES_HRPLUS_HRP4_gc | HIRES_HREN_HRP4_gc;
 	PWM_TC.CTRLA = 0;	// stop if running
-	PWM_TC.CTRLB = TC_TC4_WGMODE_NORMAL_gc;
+	PWM_TC.CTRLB = TC_TC4_WGMODE_SINGLESLOPE_gc;
 	PWM_TC.CTRLC = 0;
 	PWM_TC.CTRLD = 0;
 	PWM_TC.CTRLE = TC_TC4_CCCMODE_COMP_gc | TC_TC4_CCDMODE_COMP_gc;
 	PWM_TC.INTCTRLA = 0;
 	PWM_TC.INTCTRLB = 0;
 	PWM_TC.CNT = 0;
-	PWM_TC.PER = 0x01FF;
+	PWM_TC.PER = 0x0200;	// three LSB must be zero
 	PWM_TC.CCC = 0xFF;
 	PWM_TC.CCD = 0xFF;
 	PWM_TC.CTRLA = TC_TC4_CLKSEL_DIV1_gc;
@@ -192,22 +192,8 @@ void MEL_play(const __flash NOTE_t *melody)
 	uint16_t ms_counter = 0;
 	bool exit_flag = false;
 	bool all_silent = false;
+	uint8_t decay_scaler = 0;
 
-/*
-	for(uint16_t i = 0; i < 500; i++)
-	{
-		for (uint16_t s = 0; s < 256; s++)
-		{
-			uint8_t s1 = sinewave.wave[s] - 0x80;
-			uint8_t s2 = ~s1;
-			
-			PWM_TC.CCCBUF = (uint16_t)s1 * 2;
-			PWM_TC.CCDBUF = (uint16_t)s2 * 2;
-			_delay_us(4);
-		}
-	}
-	for(;;);
-*/
 	DACA.CH0DATA = 2048;
 	_delay_ms(50);
 
@@ -219,60 +205,6 @@ void MEL_play(const __flash NOTE_t *melody)
 	//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 	//EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
 	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_HI_gc;
-
-/*
-	for(uint8_t j = 0; j < 254; j++)
-	{
-		// buffer A
-		//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
-		//while(!(EDMA.INTFLAGS & EDMA_CH0TRNFIF_bm));
-		//EDMA.INTFLAGS = EDMA_CH0TRNFIF_bm;
-		while (dma_ch0_complete_SIG == 0);
-		dma_ch0_complete_SIG = 0;
-		
-		//for (uint8_t i = 0; i < _countof(buffer_a); i++)
-		for (uint8_t i = 0; i < 32; i++)
-		{
-			//buffer_a[i] = ((int16_t)wave1.wave[idx] * 1) + 2048;
-			uint8_t s = wave1.wave[idx] - 0x80;
-			buffer_a[i] = (uint16_t)s * 1;
-			sub++;
-			if (sub > 0)
-			{
-				sub = 0;
-				idx += 6;
-				if (idx >= limit)
-					idx -= wave1.sustain_len;
-			}
-		}
-		
-		// buffer B
-		//EDMA.CH0.CTRLA |= EDMA_CH_REPEAT_bm;
-		//while(!(EDMA.INTFLAGS & EDMA_CH2TRNFIF_bm));
-		//EDMA.INTFLAGS = EDMA_CH2TRNFIF_bm;
-		while (dma_ch2_complete_SIG == 0);
-		dma_ch2_complete_SIG = 0;
-
-		for (uint8_t i = 0; i < 32; i++)
-		{
-			//buffer_b[i] = ((int16_t)wave1.wave[idx] * 1) + 2048;
-			uint8_t s = wave1.wave[idx] - 0x80;
-			buffer_b[i] = (uint16_t)s * 1;
-			sub++;
-			if (sub > 0)
-			{
-				sub = 0;
-				idx += 6;
-				if (idx >= limit)
-					idx -= wave1.sustain_len;
-			}
-		}
-
-	}
-	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_OFF_gc;
-*/	
-
-	//for(;;);
 
 	uint32_t limit_scaled = (uint32_t)(wave1.attack_len + wave1.sustain_len) << 16;
 	uint32_t sustain_length_scaled = (uint32_t)wave1.sustain_len << 16;
@@ -345,21 +277,30 @@ void MEL_play(const __flash NOTE_t *melody)
 		{
 			int32_t a = 0;
 			for (uint8_t i = 0; i < NUM_VOICES; i++)
+			//for (uint8_t i = 0; i < 1; i++)
 			{
 				if (voices[i].velocity != 0)
 				{
 					uint16_t idx = voices[i].sample_ptr >> 16;
-					//__int24 s = wave1.wave[idx];
-					int32_t s = wave1.wave[idx];
+					int16_t s1 = wave1.wave[idx] * voices[i].velocity;
+					__int24 s2 = (__int24)s1 * decay_lut[voices[i].decay];
+					a += s2;
+					
+					/*
+					uint16_t idx = voices[i].sample_ptr >> 16;
+					__int24 s = wave1.wave[idx];
+					//int32_t s = wave1.wave[idx];
 					s *= voices[i].velocity;
 					s *= decay_lut[voices[i].decay >> 1];
 					a += s;
+					*/
 
 					voices[i].sample_ptr += key_lut[voices[i].key];
 					if (voices[i].sample_ptr > limit_scaled)
 					{
 						voices[i].sample_ptr -= sustain_length_scaled;
-						voices[i].decay++;
+						if (decay_scaler == 0)
+							voices[i].decay++;
 						if (voices[i].decay > sizeof(decay_lut))	// note faded out
 							voices[i].velocity = 0;
 					}
@@ -367,11 +308,16 @@ void MEL_play(const __flash NOTE_t *melody)
 					all_silent = false;
 				}
 			}
+			//a <<= 1;
 			a >>= 16;
 			if (a > 253) a = 253;
-			if (a < -255) a = -255;
+			if (a < -253) a = -253;
 			*ptr++ = a + 0xFF;
 		}
+
+		decay_scaler++;
+		if (decay_scaler > 2)
+			decay_scaler = 0;
 	} while(!exit_flag || !all_silent);
 
 	mel_sleep();

@@ -20,7 +20,7 @@ int main(void)
 	HW_CCPWrite(&OSC.CTRL, OSC.CTRL | OSC_RC32MEN_bm);
 	while (!(OSC.STATUS & OSC_RC32MRDY_bm));
 
-	OSC.PLLCTRL = OSC_PLLSRC_RC32M_gc | 16;
+	OSC.PLLCTRL = OSC_PLLSRC_RC32M_gc | 16;				// source is actually RC32M divided by 4!
 	HW_CCPWrite(&OSC.CTRL, OSC.CTRL | OSC_PLLEN_bm);
 	while (!(OSC.STATUS & OSC_PLLRDY_bm));
 
@@ -31,6 +31,7 @@ int main(void)
 	sei();
 
 	MEL_play(kamata4);
+	//MEL_play(test);
 	for(;;);
 }
 

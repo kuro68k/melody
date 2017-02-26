@@ -1,8 +1,6 @@
 /*
  * melody.h
  *
- * Created: 29/11/2016 15:22:00
- *  Author: paul.qureshi
  */
 
 
