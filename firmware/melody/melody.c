@@ -59,6 +59,8 @@ typedef struct
 	uint8_t		velocity;
 	uint16_t	decay;
 	uint32_t	sample_ptr;
+	uint8_t		decay_scaler;
+	uint8_t		decay_speed;
 } VOICE_t;
 
 
@@ -192,7 +194,6 @@ void MEL_play(const __flash NOTE_t *melody)
 	uint16_t ms_counter = 0;
 	bool exit_flag = false;
 	bool all_silent = false;
-	uint8_t decay_scaler = 0;
 
 	DACA.CH0DATA = 2048;
 	_delay_ms(50);
@@ -247,6 +248,8 @@ void MEL_play(const __flash NOTE_t *melody)
 						voices[i].velocity = melody->velocity;
 						voices[i].decay = 0;
 						voices[i].sample_ptr = 0;
+						voices[i].decay_scaler = 0;
+						voices[i].decay_speed = 2;
 						//break;
 					//}
 				//}
@@ -299,8 +302,11 @@ void MEL_play(const __flash NOTE_t *melody)
 					if (voices[i].sample_ptr > limit_scaled)
 					{
 						voices[i].sample_ptr -= sustain_length_scaled;
-						if (decay_scaler == 0)
+						if (voices[i].decay_scaler == 0)
 							voices[i].decay++;
+						voices[i].decay_scaler++;
+						if (voices[i].decay_scaler > voices[i].decay_speed)
+							voices[i].decay_scaler = 0;
 						if (voices[i].decay > sizeof(decay_lut))	// note faded out
 							voices[i].velocity = 0;
 					}
@@ -308,16 +314,11 @@ void MEL_play(const __flash NOTE_t *melody)
 					all_silent = false;
 				}
 			}
-			//a <<= 1;
 			a >>= 16;
 			if (a > 253) a = 253;
 			if (a < -253) a = -253;
 			*ptr++ = a + 0xFF;
 		}
-
-		decay_scaler++;
-		if (decay_scaler > 2)
-			decay_scaler = 0;
 	} while(!exit_flag || !all_silent);
 
 	mel_sleep();
