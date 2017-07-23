@@ -8,6 +8,7 @@
 #include <util/delay.h>
 #include <string.h>
 #include <stdbool.h>
+#include "stdio_fast.h"
 #include "melody.h"
 #include "wave1.h"
 
@@ -170,7 +171,7 @@ void mel_wake(void *buffer_a, void *buffer_b, uint16_t buffer_length_bytes)
 */
 void mel_sleep(void)
 {
-	DACA.CTRLA = 0;
+//	DACA.CTRLA = 0;
 	SAMPLE_TC.CTRLA = 0;
 	EDMA.CTRL = 0;
 	EDMA.CH0.CTRLA = 0;
@@ -181,6 +182,12 @@ void mel_sleep(void)
 */
 void MEL_play(const __flash NOTE_t *melody)
 {
+	// debug
+	PORTD.DIRSET = PIN3_bm;
+	STDIO_init();
+	puts_P(PSTR(NEWLINE "Melody"));
+
+
 	for (uint8_t i = 0; i < 32; i++)
 		buffer_a[i] = buffer_b[i] = 256;
 
@@ -213,6 +220,7 @@ void MEL_play(const __flash NOTE_t *melody)
 	do
 	{
 		// wait for a buffer to complete
+/* debug
 		while (!dma_ch0_complete_SIG && !dma_ch2_complete_SIG);
 
 		volatile uint16_t *ptr;
@@ -228,7 +236,7 @@ void MEL_play(const __flash NOTE_t *melody)
 			ptr = buffer_b;
 			//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 		}
-
+*/
 
 
 		// process any note start/stop events
@@ -261,7 +269,8 @@ void MEL_play(const __flash NOTE_t *melody)
 					if ((voices[i].channel == melody->channel) &&
 						(voices[i].key == melody->key))
 					{
-						voices[i].velocity = 0;	// stop
+						//voices[i].velocity = 0;	// stop
+						voices[i].decay_speed = 0;
 					}
 				}
 			}
@@ -317,9 +326,11 @@ void MEL_play(const __flash NOTE_t *melody)
 			a >>= 16;
 			if (a > 253) a = 253;
 			if (a < -253) a = -253;
-			*ptr++ = a + 0xFF;
+			//*ptr++ = a + 0xFF;
+			printf_P(PSTR("%d" NEWLINE), a);
 		}
 	} while(!exit_flag || !all_silent);
 
+	for(;;);
 	mel_sleep();
 }
