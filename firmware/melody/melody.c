@@ -205,11 +205,6 @@ void MEL_play(const __flash NOTE_t *melody)
 	DACA.CH0DATA = 2048;
 	_delay_ms(50);
 
-	//uint16_t idx = 0;
-	//uint8_t sub = 0;
-	//uint16_t limit = wave1.attack_len + wave1.sustain_len;
-	//uint16_t limit = sinewave.attack_len + sinewave.sustain_len;
-	
 	//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 	//EDMA.CH0.CTRLA |= EDMA_CH_ENABLE_bm;
 	SAMPLE_TC.INTCTRLA = TC_TC4_OVFINTLVL_HI_gc;
@@ -220,7 +215,6 @@ void MEL_play(const __flash NOTE_t *melody)
 	do
 	{
 		// wait for a buffer to complete
-/* debug
 		while (!dma_ch0_complete_SIG && !dma_ch2_complete_SIG);
 
 		volatile uint16_t *ptr;
@@ -236,7 +230,6 @@ void MEL_play(const __flash NOTE_t *melody)
 			ptr = buffer_b;
 			//EDMA.CH2.CTRLA |= EDMA_CH_REPEAT_bm;
 		}
-*/
 
 
 		// process any note start/stop events
@@ -316,7 +309,7 @@ void MEL_play(const __flash NOTE_t *melody)
 						voices[i].decay_scaler++;
 						if (voices[i].decay_scaler > voices[i].decay_speed)
 							voices[i].decay_scaler = 0;
-						if (voices[i].decay > sizeof(decay_lut))	// note faded out
+						if (voices[i].decay >= sizeof(decay_lut))	// note faded out
 							voices[i].velocity = 0;
 					}
 
@@ -326,8 +319,7 @@ void MEL_play(const __flash NOTE_t *melody)
 			a >>= 16;
 			if (a > 253) a = 253;
 			if (a < -253) a = -253;
-			//*ptr++ = a + 0xFF;
-			printf_P(PSTR("%d" NEWLINE), a);
+			*ptr++ = a + 0xFF;
 		}
 	} while(!exit_flag || !all_silent);
 
