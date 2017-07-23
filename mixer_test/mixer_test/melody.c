@@ -59,6 +59,8 @@ typedef struct
 	uint8_t		velocity;
 	uint16_t	decay;
 	uint32_t	sample_ptr;
+	uint8_t		decay_scaler;
+	uint8_t		decay_speed;
 } VOICE_t;
 
 
@@ -83,6 +85,10 @@ void MEL_play(const NOTE_t *melody)
 	raw_buffer = malloc(1024 * 1024 * 10);
 	scaled_buffer = malloc(1024 * 1024 * 10);
 
+
+	for (uint8_t i = 0; i < 32; i++)
+		buffer_a[i] = buffer_b[i] = 256;
+
 	VOICE_t voices[NUM_VOICES];
 	memset(voices, 0, sizeof(voices));
 
@@ -90,11 +96,126 @@ void MEL_play(const NOTE_t *melody)
 	bool exit_flag = false;
 	bool all_silent = false;
 
-	uint8_t decay_scaler = 0;
-
-
 	uint32_t limit_scaled = (uint32_t)(wave1.attack_len + wave1.sustain_len) << 16;
 	uint32_t sustain_length_scaled = (uint32_t)wave1.sustain_len << 16;
+
+	do
+	{
+		// process any note start/stop events
+		while (melody->time == ms_counter)
+		{
+			printf("%u\t", ms_counter);
+			printf("%u, ", melody->channel);
+			printf("%u, ", melody->key);
+			printf("%u\n", melody->velocity);
+
+			//if (melody->channel != 0)
+			//	goto hack1;
+			if (melody->velocity != 0)	// start a voice
+			{
+				uint8_t i = melody->channel % NUM_VOICES;
+				//for (uint8_t i = 0; i < NUM_VOICES; i++)
+				//{
+				//if (voices[i].velocity == 0)	// free voice
+				//{
+				voices[i].channel = melody->channel;
+				voices[i].key = melody->key;
+				voices[i].velocity = melody->velocity;
+				voices[i].decay = 0;
+				voices[i].sample_ptr = 0;
+				voices[i].decay_scaler = 0;
+				voices[i].decay_speed = 2;
+				//break;
+				//}
+				//}
+			}
+			else						// stop a voice
+			{
+				for (uint8_t i = 0; i < NUM_VOICES; i++)
+				{
+					if ((voices[i].channel == melody->channel) &&
+						(voices[i].key == melody->key))
+					{
+						//voices[i].velocity = 0;	// stop
+						voices[i].decay_speed = 0;
+					}
+				}
+			}
+			//hack1:
+			melody++;	// next note
+			if (melody->time == 0xFFFF)
+				exit_flag = true;
+		}
+
+		ms_counter++;
+
+
+		// generate buffer
+		all_silent = true;
+		for (uint8_t sample = 0; sample < 32; sample++)
+		{
+			int32_t a = 0;
+			for (uint8_t i = 0; i < NUM_VOICES; i++)
+				//for (uint8_t i = 0; i < 1; i++)
+			{
+				if (voices[i].velocity != 0)
+				{
+					uint16_t idx = voices[i].sample_ptr >> 16;
+					int16_t s1 = wave1.wave[idx] * voices[i].velocity;
+					int32_t s2 = (int32_t)s1 * decay_lut[voices[i].decay];
+					a += s2;
+
+					/*
+					uint16_t idx = voices[i].sample_ptr >> 16;
+					__int24 s = wave1.wave[idx];
+					//int32_t s = wave1.wave[idx];
+					s *= voices[i].velocity;
+					s *= decay_lut[voices[i].decay >> 1];
+					a += s;
+					*/
+
+					voices[i].sample_ptr += key_lut[voices[i].key];
+					if (voices[i].sample_ptr > limit_scaled)
+					{
+						voices[i].sample_ptr -= sustain_length_scaled;
+						if (voices[i].decay_scaler == 0)
+							voices[i].decay++;
+						voices[i].decay_scaler++;
+						if (voices[i].decay_scaler > voices[i].decay_speed)
+							voices[i].decay_scaler = 0;
+						if (voices[i].decay > sizeof(decay_lut))	// note faded out
+							voices[i].velocity = 0;
+					}
+
+					all_silent = false;
+				}
+			}
+			raw_buffer[sample_count] = a * (1 << 8);
+			a >>= 16;
+			if (max < a) max = a;
+			if (min > a) min = a;
+			if (a > 253) a = 253;
+			if (a < -253) a = -253;
+			//*ptr++ = a + 0xFF;
+			sample_count++;
+			if (sample_count == 304302)
+				printf("debug\n");
+			//scaled_buffer[sample_count++] = a * (1 << 23);
+		}
+	} while (!exit_flag || !all_silent);
+
+
+	printf("Min: %d\n", min);
+	printf("Max: %d\n", max);
+
+	WAV_write_file("o_raw.wav", raw_buffer, sample_count);
+	WAV_write_file("o_scaled.wav", scaled_buffer, sample_count);
+
+
+
+/*
+	uint8_t decay_scaler = 0;
+
 
 	do
 	{
@@ -196,10 +317,5 @@ void MEL_play(const NOTE_t *melody)
 		if (decay_scaler > 1)
 			decay_scaler = 0;
 	} while(!exit_flag || !all_silent);
-
-	printf("Min: %d\n", min);
-	printf("Max: %d\n", max);
-
-	WAV_write_file("o_raw.wav", raw_buffer, sample_count);
-	WAV_write_file("o_scaled.wav", scaled_buffer, sample_count);
+*/
 }
