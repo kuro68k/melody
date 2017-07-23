@@ -95,12 +95,6 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="debug.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="debug.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="hw_misc.c">
       <SubType>compile</SubType>
     </Compile>
